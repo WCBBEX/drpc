@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -15,6 +16,12 @@ import (
 )
 
 const MagicNumber = 0x3bef5c
+
+const (
+	connected        = "200 Connected to DRPC"
+	defaultRPCPath   = "/_dprc_"
+	defaultDebugPath = "/debug/drpc"
+)
 
 var DefaultServer = NewServer()
 
@@ -216,4 +223,32 @@ func (s *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex
 	case <-called:
 		<-sent
 	}
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.Method != "CONNECT" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = io.WriteString(w, "405 must CONNECT\n")
+		return
+	}
+
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		log.Print("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
+		return
+	}
+
+	_, _ = io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
+	s.ServeConn(conn)
+}
+
+func (s *Server) HandleHTTP() {
+	http.Handle(defaultRPCPath, s)
+	http.Handle(defaultDebugPath, debugHTTP{s})
+	log.Println("http server start")
+}
+
+func HandleHTTP() {
+	DefaultServer.HandleHTTP()
 }

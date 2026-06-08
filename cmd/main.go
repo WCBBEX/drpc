@@ -5,6 +5,7 @@ import (
 	"drpc"
 	"log"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -18,26 +19,21 @@ func (f Foo) Sum(args Args, reply *int) error {
 	return nil
 }
 
-func startServer(addr chan string) {
+func startServer(addrCh chan string) {
 	var foo Foo
-	if err := drpc.Register(&foo); err != nil {
-		log.Fatal("register error:", err)
-	}
-	l, err := net.Listen("tcp", ":0")
-	if err != nil {
-		log.Fatal("network error:", err)
-	}
-	log.Println("start rpc server on", l.Addr())
-	addr <- l.Addr().String()
-	drpc.Accept(l)
+	l, _ := net.Listen("tcp", ":9999")
+	_ = drpc.Register(&foo)
+	drpc.HandleHTTP()
+	addrCh <- l.Addr().String()
+	_ = http.Serve(l, nil)
 }
 
-func main() {
-	log.SetFlags(0)
-	addr := make(chan string)
-	go startServer(addr)
-	client, _ := drpc.Dial("tcp", <-addr)
-	defer func() { _ = client.Close() }()
+func call(addrCh chan string) {
+	client, _ := drpc.DialHTTP("tcp", <-addrCh)
+	defer func() {
+		time.Sleep(200 * time.Millisecond)
+		_ = client.Close()
+	}()
 
 	time.Sleep(time.Second)
 	var wg sync.WaitGroup
@@ -54,4 +50,11 @@ func main() {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func main() {
+	log.SetFlags(0)
+	ch := make(chan string)
+	go call(ch)
+	startServer(ch)
 }
