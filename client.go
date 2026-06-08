@@ -1,6 +1,7 @@
 package drpc
 
 import (
+	"context"
 	"drpc/codec"
 	"encoding/json"
 	"errors"
@@ -9,7 +10,10 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 )
+
+var ErrShutdown = errors.New("connection is shut down")
 
 type Client struct {
 	mu       sync.Mutex
@@ -167,12 +171,16 @@ func (c *Client) Go(serviceMethod string, args, reply any, done chan *Call) *Cal
 	return call
 }
 
-func (c *Client) Call(serviceMethod string, args, reply any) error {
-	call := <-c.Go(serviceMethod, args, reply, make(chan *Call, 1)).Done
-	return call.Error
+func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply any) error {
+	call := c.Go(serviceMethod, args, reply, make(chan *Call, 1))
+	select {
+	case <-ctx.Done():
+		c.removeCall(call.Seq)
+		return errors.New("rpc client: call failed: " + ctx.Err().Error())
+	case <-call.Done:
+		return call.Error
+	}
 }
-
-var ErrShutdown = errors.New("connection is shut down")
 
 type Call struct {
 	Seq           uint64
@@ -217,4 +225,47 @@ func Dial(network, address string, opts ...*Option) (client *Client, err error) 
 	}()
 
 	return NewClient(conn, opt)
+}
+
+type clientResult struct {
+	client *Client
+	err    error
+}
+
+type newClientFunc func(conn net.Conn, opt *Option) (client *Client, err error)
+
+func dialTimeout(f newClientFunc, network, addr string, opts ...*Option) (client *Client, err error) {
+	opt, err := parseOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := net.DialTimeout(network, addr, opt.ConnectTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			_ = conn.Close()
+		}
+	}()
+
+	ch := make(chan clientResult)
+	go func() {
+		client, err := f(conn, opt)
+		ch <- clientResult{client, err}
+	}()
+
+	if opt.HandleTimeout == 0 {
+		cr := <-ch
+		return cr.client, cr.err
+	}
+
+	select {
+	case <-time.After(opt.HandleTimeout):
+		return nil, fmt.Errorf("rpc client: connect timeout: expect within %s", opt.ConnectTimeout)
+	case cr := <-ch:
+		return cr.client, cr.err
+	}
 }
