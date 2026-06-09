@@ -134,7 +134,6 @@ func (s *Server) serveCodec(cc codec.Codec) {
 	}
 
 	wg.Wait()
-	_ = cc.Close()
 }
 
 func Accept(lis net.Listener) { DefaultServer.Accept(lis) }

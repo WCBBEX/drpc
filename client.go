@@ -64,7 +64,7 @@ func (c *Client) Close() error {
 	return c.codec.Close()
 }
 
-func (c *Client) isAvailable() bool {
+func (c *Client) IsAvailable() bool {
 	return !c.closing.Load() && !c.shutdown.Load()
 }
 
