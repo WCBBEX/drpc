@@ -2,82 +2,52 @@ package xclient
 
 import (
 	"errors"
-	"math"
-	"math/rand"
+	"io"
 	"sync"
-	"time"
-)
-
-type SelectMode int
-
-const (
-	RandomSelect SelectMode = iota
-	RoundRobinSelect
 )
 
 type Discovery interface {
-	Refresh() error
-	Update(servers []string) error
-	Get(mode SelectMode) (string, error)
-	GetAll() ([]string, error)
+	io.Closer
+	GetServices(serviceName string) ([]string, error)
+	Refresh(serviceName string) error
 }
 
 type MultiServersDiscovery struct {
-	r       *rand.Rand
-	mu      sync.RWMutex
-	servers []string
-	index   int
+	mu       sync.RWMutex
+	services map[string][]string
 }
 
-func NewMultiServerDiscovery(servers []string) *MultiServersDiscovery {
-	d := &MultiServersDiscovery{
-		servers: servers,
-		r:       rand.New(rand.NewSource(time.Now().UnixNano())),
-	}
-
-	d.index = d.r.Intn(math.MaxInt32 - 1)
-	return d
+func NewMultiServerDiscovery() *MultiServersDiscovery {
+	return &MultiServersDiscovery{}
 }
 
 var _ Discovery = (*MultiServersDiscovery)(nil)
 
-func (d *MultiServersDiscovery) Refresh() error {
+func (d *MultiServersDiscovery) Refresh(serviceName string) error {
 	return nil
 }
 
-func (d *MultiServersDiscovery) Update(servers []string) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	d.servers = servers
-	return nil
-}
-
-func (d *MultiServersDiscovery) Get(mode SelectMode) (string, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	n := len(d.servers)
-	if n == 0 {
-		return "", errors.New("rpc discovery: no available servers")
-	}
-
-	switch mode {
-	case RandomSelect:
-		return d.servers[d.r.Intn(n)], nil
-	case RoundRobinSelect:
-		s := d.servers[d.index%n]
-		d.index = (d.index + 1) % n
-		return s, nil
-	default:
-		return "", errors.New("rpc discovery: not supported select mode")
-	}
-}
-
-func (d *MultiServersDiscovery) GetAll() ([]string, error) {
+func (d *MultiServersDiscovery) GetServices(serviceName string) ([]string, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	servers := make([]string, len(d.servers), len(d.servers))
-	copy(servers, d.servers)
-	return servers, nil
+	servers, ok := d.services[serviceName]
+	if !ok || len(servers) == 0 {
+		return nil, errors.New("rpc discovery: no available servers for service: " + serviceName)
+	}
+
+	serversCopy := make([]string, len(servers))
+	copy(serversCopy, servers)
+	return serversCopy, nil
+}
+
+func (d *MultiServersDiscovery) Close() error {
+	return nil
+}
+
+func (d *MultiServersDiscovery) Update(serviceName string, servers []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.services[serviceName] = servers
 }

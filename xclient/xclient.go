@@ -3,23 +3,25 @@ package xclient
 import (
 	"context"
 	. "drpc"
+	. "drpc/balancer"
+	"fmt"
 	"io"
-	"reflect"
+	"strings"
 	"sync"
 )
 
 type XClient struct {
-	d       Discovery
-	mode    SelectMode
-	opt     *Option
-	mu      sync.Mutex
-	clients map[string]*Client
+	d        Discovery
+	balancer Balancer
+	opt      *Option
+	mu       sync.Mutex
+	clients  map[string]*Client
 }
 
 var _ io.Closer = (*XClient)(nil)
 
-func NewXClient(d Discovery, mode SelectMode, opt *Option) *XClient {
-	return &XClient{d: d, mode: mode, opt: opt, clients: make(map[string]*Client)}
+func NewXClient(d Discovery, b Balancer, opt *Option) *XClient {
+	return &XClient{d: d, balancer: b, opt: opt, clients: make(map[string]*Client)}
 }
 
 func (xc *XClient) Close() error {
@@ -68,53 +70,21 @@ func (xc *XClient) call(rpcAddr string, ctx context.Context, serviceMethod strin
 }
 
 func (xc *XClient) Call(ctx context.Context, serviceMethod string, args, reply any) error {
-	rpcAddr, err := xc.d.Get(xc.mode)
+	parts := strings.Split(serviceMethod, ".")
+	if len(parts) < 2 {
+		return fmt.Errorf("rpc client: invalid serviceMethod format: %s, expect Service.Method", serviceMethod)
+	}
+	serviceName := parts[0]
+
+	servers, err := xc.d.GetServices(serviceName)
+	if err != nil {
+		return err
+	}
+
+	rpcAddr, err := xc.balancer.Choose(servers)
 	if err != nil {
 		return err
 	}
 
 	return xc.call(rpcAddr, ctx, serviceMethod, args, reply)
-}
-
-func (xc *XClient) Broadcast(ctx context.Context, serviceMethod string, args, reply any) error {
-	servers, err := xc.d.GetAll()
-	if err != nil {
-		return err
-	}
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var e error
-	replyDone := reply == nil
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	for _, rpcAddr := range servers {
-		wg.Add(1)
-		go func(rpcAddr string) {
-			defer wg.Done()
-			var clonedReply any
-			if reply != nil {
-				clonedReply = reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
-			}
-
-			err := xc.call(rpcAddr, ctx, serviceMethod, args, clonedReply)
-			mu.Lock()
-			if err != nil && e == nil {
-				e = err
-				cancel()
-			}
-
-			if err == nil && !replyDone {
-				reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(clonedReply).Elem())
-				replyDone = true
-			}
-			mu.Unlock()
-
-		}(rpcAddr)
-	}
-
-	wg.Wait()
-	return e
 }
