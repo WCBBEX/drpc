@@ -12,22 +12,22 @@ type Discovery interface {
 	Refresh(serviceName string) error
 }
 
-type MultiServersDiscovery struct {
+type BasicServersDiscovery struct {
 	mu       sync.RWMutex
 	services map[string][]string
 }
 
-func NewMultiServerDiscovery() *MultiServersDiscovery {
-	return &MultiServersDiscovery{}
+func NewMultiServerDiscovery() *BasicServersDiscovery {
+	return &BasicServersDiscovery{}
 }
 
-var _ Discovery = (*MultiServersDiscovery)(nil)
+var _ Discovery = (*BasicServersDiscovery)(nil)
 
-func (d *MultiServersDiscovery) Refresh(serviceName string) error {
+func (d *BasicServersDiscovery) Refresh(serviceName string) error {
 	return nil
 }
 
-func (d *MultiServersDiscovery) GetServices(serviceName string) ([]string, error) {
+func (d *BasicServersDiscovery) GetServices(serviceName string) ([]string, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -41,11 +41,11 @@ func (d *MultiServersDiscovery) GetServices(serviceName string) ([]string, error
 	return serversCopy, nil
 }
 
-func (d *MultiServersDiscovery) Close() error {
+func (d *BasicServersDiscovery) Close() error {
 	return nil
 }
 
-func (d *MultiServersDiscovery) Update(serviceName string, servers []string) {
+func (d *BasicServersDiscovery) Update(serviceName string, servers []string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
