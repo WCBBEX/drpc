@@ -4,6 +4,7 @@ import (
 	"context"
 	. "drpc"
 	. "drpc/balancer"
+	"drpc/discovery"
 	"fmt"
 	"io"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 type XClient struct {
-	d        Discovery
+	d        discovery.Discovery
 	balancer Balancer
 	opt      *Option
 	mu       sync.Mutex
@@ -20,7 +21,7 @@ type XClient struct {
 
 var _ io.Closer = (*XClient)(nil)
 
-func NewXClient(d Discovery, b Balancer, opt *Option) *XClient {
+func NewXClient(d discovery.Discovery, b Balancer, opt *Option) *XClient {
 	return &XClient{d: d, balancer: b, opt: opt, clients: make(map[string]*Client)}
 }
 
