@@ -1,6 +1,7 @@
-package xclient
+package discovery
 
 import (
+	"drpc/utils"
 	"errors"
 	"io"
 	"sync"
@@ -17,8 +18,8 @@ type BasicServersDiscovery struct {
 	services map[string][]string
 }
 
-func NewMultiServerDiscovery() *BasicServersDiscovery {
-	return &BasicServersDiscovery{}
+func NewBasicServerDiscovery(services map[string][]string) *BasicServersDiscovery {
+	return &BasicServersDiscovery{services: services}
 }
 
 var _ Discovery = (*BasicServersDiscovery)(nil)
@@ -36,9 +37,7 @@ func (d *BasicServersDiscovery) GetServices(serviceName string) ([]string, error
 		return nil, errors.New("rpc discovery: no available servers for service: " + serviceName)
 	}
 
-	serversCopy := make([]string, len(servers))
-	copy(serversCopy, servers)
-	return serversCopy, nil
+	return utils.CopySlice(servers), nil
 }
 
 func (d *BasicServersDiscovery) Close() error {
