@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"drpc/codec"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -39,8 +38,15 @@ func NewClient(conn net.Conn, opt *Option) (*Client, error) {
 		return nil, err
 	}
 
-	if err := json.NewEncoder(conn).Encode(opt); err != nil {
-		log.Println("rpc client: options error: ", err)
+	handshakeBytes, err := PackOption(opt)
+	if err != nil {
+		log.Println("rpc client: pack option error:", err)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	if _, err := conn.Write(handshakeBytes); err != nil {
+		log.Println("rpc client: write options error: ", err)
 		_ = conn.Close()
 		return nil, err
 	}

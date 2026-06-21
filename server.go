@@ -2,7 +2,6 @@ package drpc
 
 import (
 	"drpc/codec"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -93,9 +92,15 @@ func (s *Server) Accept(l net.Listener) {
 func (s *Server) ServeConn(conn io.ReadWriteCloser) {
 	defer func() { _ = conn.Close() }()
 
-	var opt Option
-	if err := json.NewDecoder(conn).Decode(&opt); err != nil {
-		log.Println("rpc server: options error: ", err)
+	buf := make([]byte, HandshakeSize)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		log.Println("rpc server: read options error:", err)
+		return
+	}
+
+	opt, err := UnpackOption(buf)
+	if err != nil {
+		log.Println("rpc server: unpack options error:", err)
 		return
 	}
 
