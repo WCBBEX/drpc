@@ -1,6 +1,7 @@
 package drpc
 
 import (
+	"context"
 	"drpc/codec"
 	"errors"
 	"fmt"
@@ -38,11 +39,16 @@ var DefaultOption = &Option{
 }
 
 type Server struct {
-	serviceMap sync.Map
+	serviceMap  sync.Map
+	middlewares []ServerMiddleware
 }
 
 func NewServer() *Server {
 	return &Server{}
+}
+
+func (s *Server) Use(middlewares ...ServerMiddleware) {
+	s.middlewares = append(s.middlewares, middlewares...)
 }
 
 func (s *Server) Register(ins any) error {
@@ -203,7 +209,14 @@ func (s *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex
 	sent := make(chan struct{})
 
 	go func() {
-		err := req.svc.call(req.mtype, req.argv, req.replyv)
+		ctx := context.Background()
+		finalHandler := func(c context.Context, sm string, argv, replyv reflect.Value) error {
+			return req.svc.call(req.mtype, argv, replyv)
+		}
+
+		chainedHandler := chainServerMiddlewares(s.middlewares, finalHandler)
+		err := chainedHandler(ctx, req.h.ServiceMethod, req.argv, req.replyv)
+
 		called <- struct{}{}
 		if err != nil {
 			req.h.Error = err.Error()
@@ -227,6 +240,23 @@ func (s *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex
 	case <-called:
 		<-sent
 	}
+}
+
+func chainServerMiddlewares(middlewares []ServerMiddleware, finalHandler ServerHandler) ServerHandler {
+	if len(middlewares) == 0 {
+		return finalHandler
+	}
+
+	chain := finalHandler
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		currentMiddleware := middlewares[i]
+		nextHandler := chain
+
+		chain = func(ctx context.Context, sm string, av, rv reflect.Value) error {
+			return currentMiddleware(ctx, sm, av, rv, nextHandler)
+		}
+	}
+	return chain
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
