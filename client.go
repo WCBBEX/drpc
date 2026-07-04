@@ -3,9 +3,9 @@ package drpc
 import (
 	"bufio"
 	"context"
-	"drpc/codec"
 	"errors"
 	"fmt"
+	"github.com/WCBBEX/drpc/codec"
 	"io"
 	"log"
 	"net"

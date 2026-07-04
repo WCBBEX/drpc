@@ -1,10 +1,11 @@
 package discovery
 
 import (
-	"drpc/utils"
 	"errors"
 	"io"
 	"sync"
+
+	"github.com/WCBBEX/drpc/utils"
 )
 
 type Discovery interface {

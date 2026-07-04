@@ -2,9 +2,9 @@ package drpc
 
 import (
 	"bytes"
-	"drpc/codec"
 	"encoding/binary"
 	"fmt"
+	"github.com/WCBBEX/drpc/codec"
 	"time"
 )
 

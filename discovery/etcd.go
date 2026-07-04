@@ -2,8 +2,8 @@ package discovery
 
 import (
 	"context"
-	. "drpc/utils"
 	"fmt"
+	. "github.com/WCBBEX/drpc/utils"
 	"log"
 	"strings"
 	"sync"

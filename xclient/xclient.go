@@ -2,13 +2,14 @@ package xclient
 
 import (
 	"context"
-	. "drpc"
-	. "drpc/balancer"
-	"drpc/discovery"
 	"fmt"
 	"io"
 	"strings"
 	"sync"
+
+	. "github.com/WCBBEX/drpc"
+	. "github.com/WCBBEX/drpc/balancer"
+	"github.com/WCBBEX/drpc/discovery"
 )
 
 type XClient struct {
