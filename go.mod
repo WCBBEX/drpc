@@ -1,4 +1,4 @@
-module drpc
+module github.com/WCBBEX/drpc
 
 go 1.25.0
 
